@@ -1,0 +1,5 @@
+model,roc_auc_mean,roc_auc_sd,f1_macro_mean,best_params
+logistic,0.8470366886968481,0.028002986108180975,0.5732827436199018,{'model__C': np.float64(0.015876781526923997)}
+svm,0.8573031895466485,0.02917459462547498,0.5738758560691404,"{'model__C': np.float64(78.52755494724258), 'model__gamma': np.float64(8.532678095658718e-05), 'model__kernel': 'rbf'}"
+random_forest,0.8362199525935183,0.017234061159292605,0.5341325522377682,"{'model__max_depth': 20, 'model__max_features': 'sqrt', 'model__min_samples_leaf': 1, 'model__n_estimators': 659}"
+xgboost,0.8551159584661232,0.019308077685248132,0.5566394048754022,"{'model__colsample_bytree': np.float64(0.45955461377935913), 'model__learning_rate': np.float64(0.04274545976251978), 'model__max_depth': 4, 'model__min_child_weight': np.float64(0.5071514980544014), 'model__n_estimators': 358, 'model__reg_lambda': np.float64(0.10325337616482036), 'model__subsample': np.float64(0.6575231118042959)}"

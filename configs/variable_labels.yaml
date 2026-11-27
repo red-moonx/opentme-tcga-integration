@@ -1,0 +1,105 @@
+# Readable names of the molecular variables, used in figures and tables.
+# mut_<GENE> and aneu_<event> columns are named automatically (see tcga.make_label).
+labels:
+  clin_age: Age at diagnosis
+  clin_sex: Sex
+  clin_histological_type: Histological type
+  clin_os: Overall survival event
+  clin_os_time: Overall survival time (days)
+  clin_pfi: Progression-free interval event
+  clin_pfi_time: Progression-free interval time (days)
+  clin_margin_status: Surgical margin status
+  clin_menopause_status: Menopausal status
+  clin_histology: Histology
+  clin_stage_simple: AJCC stage
+  clin_tss: Tissue source site
+  clin_pam50: PAM50 subtype
+  clin_subtype: TCGA molecular subtype
+  clin_tnbc: Triple-negative (TNBC)
+  abs_purity: Tumour purity (ABSOLUTE)
+  abs_ploidy: Tumour ploidy (ABSOLUTE)
+  abs_genome_doublings: Whole-genome doublings (ABSOLUTE)
+  thor_immune_subtype: Immune subtype C1–C6 (Thorsson)
+  thor_leukocyte_fraction: Leukocyte fraction (Thorsson)
+  thor_til_fraction_he: TIL fraction, H&E deep learning (Saltz)
+  thor_tgfb_response: TGF-β response (Thorsson)
+  thor_ifng_response: IFN-γ response (Thorsson)
+  thor_lymphocyte_infiltration: Lymphocyte infiltration (Thorsson)
+  thor_macrophage_regulation: Macrophage regulation (Thorsson)
+  thor_proliferation: Proliferation (Thorsson)
+  thor_tmb_log1p: Tumour mutation burden, log (Thorsson)
+  thor_tmb: Tumour mutation burden (Thorsson)
+  thor_snv_neoantigens: SNV neoantigens (Thorsson)
+  thor_aneuploidy_score: Aneuploidy score (Thorsson)
+  thor_heterogeneity: Intratumour heterogeneity (Thorsson)
+  thor_hrd: HRD score (Thorsson)
+  thor_bcr_richness: BCR richness (Thorsson)
+  cib_t_cells_cd8: CD8 T cells (CIBERSORT)
+  cib_t_cells_regulatory_tregs: Tregs (CIBERSORT)
+  cib_t_cells_follicular_helper: T follicular helper cells (CIBERSORT)
+  cib_t_cells_cd4_naive: Naive CD4 T cells (CIBERSORT)
+  cib_t_cells_cd4_memory_resting: Resting memory CD4 T cells (CIBERSORT)
+  cib_t_cells_cd4_memory_activated: Activated memory CD4 T cells (CIBERSORT)
+  cib_t_cells_gamma_delta: γδ T cells (CIBERSORT)
+  cib_b_cells_naive: Naive B cells (CIBERSORT)
+  cib_b_cells_memory: Memory B cells (CIBERSORT)
+  cib_plasma_cells: Plasma cells (CIBERSORT)
+  cib_nk_cells_resting: Resting NK cells (CIBERSORT)
+  cib_nk_cells_activated: Activated NK cells (CIBERSORT)
+  cib_monocytes: Monocytes (CIBERSORT)
+  cib_macrophages_m0: M0 macrophages (CIBERSORT)
+  cib_macrophages_m1: M1 macrophages (CIBERSORT)
+  cib_macrophages_m2: M2 macrophages (CIBERSORT)
+  cib_dendritic_cells_resting: Resting dendritic cells (CIBERSORT)
+  cib_dendritic_cells_activated: Activated dendritic cells (CIBERSORT)
+  cib_mast_cells_resting: Resting mast cells (CIBERSORT)
+  cib_mast_cells_activated: Activated mast cells (CIBERSORT)
+  cib_eosinophils: Eosinophils (CIBERSORT)
+  cib_neutrophils: Neutrophils (CIBERSORT)
+  cib_lymphocytes: Lymphocytes, T + B + NK (CIBERSORT sum)
+  cib_macrophages: Macrophages, M0 + M1 + M2 (CIBERSORT sum)
+  mut_profiled: Exome profiled (MC3)
+  path_cell_cycle: Cell cycle pathway altered
+  path_hippo: Hippo pathway altered
+  path_myc: MYC pathway altered
+  path_notch: Notch pathway altered
+  path_nrf2: NRF2 pathway altered
+  path_pi3k: PI3K pathway altered
+  path_rtk_ras: RTK-RAS pathway altered
+  path_tp53: TP53 pathway altered
+  path_tgf_beta: TGF-β pathway altered
+  path_wnt: WNT pathway altered
+  hyp_buffa: Hypoxia score (Buffa)
+  expr_COL10A1: COL10A1 expression (RNA)
+  sig_angiogenesis: Angiogenesis (ssGSEA)
+  sig_antitumor_cytokines: Antitumour cytokines (ssGSEA)
+  sig_b_cells: B cells (ssGSEA)
+  sig_cancer_associated_fibroblasts: Cancer-associated fibroblasts (ssGSEA)
+  sig_checkpoint_molecules: Checkpoint molecules (ssGSEA)
+  sig_co_stimulatory_ligands: Co-stimulatory ligands (ssGSEA)
+  sig_co_stimulatory_receptors: Co-stimulatory receptors (ssGSEA)
+  sig_effector_cell_traffic: Effector cell traffic (ssGSEA)
+  sig_effector_cells: Effector cells (ssGSEA)
+  sig_endothelium: Endothelium (ssGSEA)
+  sig_granulocyte_traffic: Granulocyte traffic (ssGSEA)
+  sig_hallmark_glycolysis: Glycolysis, Hallmark (ssGSEA)
+  sig_immune_suppression_by_myeloid_cells: Myeloid immune suppression (ssGSEA)
+  sig_m1_signature: M1 macrophages (ssGSEA)
+  sig_macrophage_and_dc_traffic: Macrophage and DC traffic (ssGSEA)
+  sig_matrix: Matrix (ssGSEA)
+  sig_matrix_remodeling: Matrix remodelling (ssGSEA)
+  sig_mhci: MHC class I (ssGSEA)
+  sig_mhcii: MHC class II (ssGSEA)
+  sig_myeloid_cells_traffic: Myeloid cell traffic (ssGSEA)
+  sig_neutrophil_signature: Neutrophils (ssGSEA)
+  sig_nk_cells: NK cells (ssGSEA)
+  sig_protumor_cytokines: Protumour cytokines (ssGSEA)
+  sig_t_cells: T cells (ssGSEA)
+  sig_th1_signature: Th1 cells (ssGSEA)
+  sig_th2_signature: Th2 cells (ssGSEA)
+  sig_tls_12_chemokines: 12-chemokine TLS (ssGSEA)
+  sig_tls_organizers: TLS organisers (ssGSEA)
+  sig_treg: Tregs (ssGSEA)
+  sig_treg_and_th2_traffic: Treg and Th2 traffic (ssGSEA)
+  sig_tumor_associated_macrophages: Tumour-associated macrophages (ssGSEA)
+  sig_tumor_proliferation_rate: Tumour proliferation rate (ssGSEA)

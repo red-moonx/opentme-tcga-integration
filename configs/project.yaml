@@ -1,0 +1,51 @@
+# Project-wide settings shared by every notebook and every indication.
+#
+# Loaded by `opentme_tcga.config.load_config`, which merges, in this order:
+#   1. configs/project.yaml              (this file)
+#   2. configs/analysis.yaml             (analysis parameters, one section per step)
+#   3. configs/indications/<name>.yaml   (cancer-specific values; may override 1 and 2)
+
+seed: 42
+
+opentme:
+  repo_id: Aignostics/OpenTME
+  # Only tables, documentation and settings; slide thumbnails (> 6 GB) are skipped.
+  allow_patterns: ["*.csv", "*.md", "*.pdf", "settings/*"]
+  # Dataset version (Hugging Face commit) used in this analysis. Later releases add tables
+  # and have not been tested with this code; null = latest version.
+  revision: 86d920d765ddb432dd151f8993242056509720b2
+
+paths:
+  # Data never lives in git. `data` may be absolute or relative to the repository
+  # root, and can be overridden with the environment variable OPENTME_TCGA_DATA_DIR
+  # (useful when the data folder is kept outside the repository).
+  data: data
+  raw_opentme: "{data}/raw/opentme"
+  interim: "{data}/interim"
+  processed: "{data}/processed"
+  raw_tcga: "{data}/raw/tcga"
+  # Tables and figures, one sub-folder per indication and notebook (committed to git).
+  results: "results/{indication}"
+  figures: "figures/{indication}"
+
+files:
+  opentme_slides: "{interim}/opentme_{opentme}_slides.parquet"
+  opentme_patients: "{processed}/opentme_{opentme}_patients.parquet"
+  tcga_mutations: "{interim}/mc3_{opentme}_nonsilent_filtered.parquet"
+  tcga_rna: "{interim}/tcga_{opentme}_rna_log2.parquet"
+  tcga_master: "{processed}/tcga_{opentme}_molecular_master.parquet"
+  tcga_working: "{processed}/tcga_{opentme}_molecular_working.parquet"
+  tcga_dictionary: "{processed}/tcga_{opentme}_molecular_dictionary.csv"
+  integrated: "{processed}/integrated_{opentme}.parquet"
+  spatial_phenotypes: "{processed}/spatial_phenotypes_{opentme}.parquet"
+
+# Units of density features, as delivered by OpenTME. Multiply a raw value by the
+# factor of its source table to obtain cells (or structures) per mm².
+# tme cell densities are per µm² (Galama et al. 2026); wtr_cell densities appear to be per mm² already.
+# tls densities are not documented: their magnitude indicates per mm² (the smallest non-zero values,
+# about 0.002-0.003, correspond to one TLS in a slide of 3-5 cm²; per µm² they would mean hundreds of
+# thousands of TLS per mm²). Notebook 01 (section 8.1) prints a check of these assumptions.
+density_per_mm2:
+  tme: 1.0e+6
+  tls: 1.0
+  wtr_cell: 1.0

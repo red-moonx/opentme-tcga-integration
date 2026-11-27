@@ -1,0 +1,143 @@
+# Breast invasive carcinoma (TCGA-BRCA), the pilot indication.
+#
+# To run the pipeline on another OpenTME cancer, copy this file (e.g. lung.yaml),
+# change the values below and pass the new name to `load_config`. Any value of
+# configs/analysis.yaml can also be overridden here.
+
+indication:
+  name: breast                 # short name: config file and results folder
+  opentme: breast_cancer       # name used by OpenTME in its folders and table names
+  tcga_project: TCGA-BRCA
+  tcga_code: BRCA
+  cbioportal_study: brca_tcga_pan_can_atlas_2018
+
+# ---------------------------------------------------------------------------
+# Breast-specific choices for notebook 02
+# ---------------------------------------------------------------------------
+tcga_molecular:
+  clinical:
+    histology_map:
+      Infiltrating Ductal Carcinoma: ductal
+      Infiltrating Lobular Carcinoma: lobular
+      Mixed Histology (please specify): mixed
+
+  # Intrinsic subtypes and TNBC status (Thennavan et al., Cell Genomics 2021, Data S1).
+  subtypes:
+    source: file
+    column: clin_pam50
+    label: PAM50 subtype
+    order: [LumA, LumB, HER2E, Her2, Basal, Normal, normal-like]
+    colors: {LumA: "#1f77b4", LumB: "#aec7e8", HER2E: "#ff7f0e", Her2: "#ff7f0e", Basal: "#d62728",
+             Normal: "#2ca02c", normal-like: "#2ca02c"}
+    file: Thennavan_2021_DataS1.xlsx
+    sheet: 0
+    barcode_column: CLID
+    reference: "Thennavan et al., Cell Genomics 2021, Data S1"
+    columns:
+      clin_pam50:
+        source: PAM50 and Claudin-low (CLOW) Molecular Subtype
+        recode: {CLOW: Basal}                # few claudin-low tumours: pooled into Basal
+        description: "PAM50 intrinsic subtype (claudin-low pooled into Basal); Thennavan et al. 2021"
+      clin_tnbc:
+        source: Triple Negative Status
+        recode: {"Yes": true, "No": false}
+        keep_unmapped: false
+        dtype: boolean
+        description: "Triple negative (ER-, PR-, HER2- by clinical IHC); Thennavan et al. 2021"
+
+  # Single genes added next to the signatures (Hammerl et al. 2021: COL10A1 and immune exclusion).
+  single_genes: [COL10A1]
+
+  arm_level:
+    required_events: [16q_loss]              # CDH1 hypothesis: kept whatever its frequency
+    secondary_events: [16q_loss]             # the other events are exploratory
+
+  # Pathway -> driver genes, to show how much of each pathway the mutations explain.
+  pathway_genes:
+    path_tp53: [mut_TP53]
+    path_pi3k: [mut_PIK3CA, mut_PTEN]
+
+  # Pairs with |rho| >= 0.90 kept on purpose because they measure different biology.
+  # All other redundant pairs are resolved by the rule in tcga.select_redundant (section 12).
+  redundancy:
+    # Variables pre-specified in the analysis plan (used by name in notebooks 04-07):
+    # never dropped as redundant.
+    protected: [abs_purity, thor_tmb, thor_aneuploidy_score, thor_hrd, thor_heterogeneity,
+                thor_til_fraction_he, thor_leukocyte_fraction, thor_tgfb_response, thor_ifng_response,
+                sig_tls_12_chemokines, sig_tls_organizers, sig_effector_cells, sig_checkpoint_molecules,
+                sig_cancer_associated_fibroblasts, sig_tumor_proliferation_rate, sig_mhci,
+                sig_hallmark_glycolysis, hyp_buffa]
+    keep_pairs:
+      - [sig_effector_cells, thor_lymphocyte_infiltration]      # cytotoxic function vs abundance
+      - [sig_tls_12_chemokines, sig_effector_cells]             # lymphoid niche vs cytotoxic capacity
+      - [sig_cancer_associated_fibroblasts, thor_tgfb_response] # stromal cells vs TGF-beta signal
+      - [sig_tls_12_chemokines, sig_checkpoint_molecules]       # TLS organisation vs exhaustion
+      - [clin_pfi_time, clin_os_time]                           # distinct clinical endpoints
+
+integration:
+  key_variables: [CELL_DENSITY_LYMPHOCYTE_IN_CARCINOMA, CELL_DENSITY_LYMPHOCYTE_IN_STROMA,
+                  thor_leukocyte_fraction, thor_til_fraction_he, abs_purity, clin_tnbc]
+
+immune_phenotypes:
+  subtype_strata: [Basal, HER2E, LumA, LumB]
+  extra_strata: {TNBC: clin_tnbc}
+  example_tumours: {Inflamed: TCGA-D8-A1JB, Excluded: TCGA-A8-A06X}
+  outcome:
+    cox_variables: [expr_COL10A1]     # CAF marker of immune exclusion (Hammerl et al. 2021)
+
+tls_analysis:
+  robustness_outcomes: [expr_COL10A1]    # main phenotype result (notebook 04)
+  mutation_detail_genes: [KMT2C]
+
+genomic_footprints:
+  derived:
+    two_hit:
+      cdh1_two_hit: {mutation: mut_CDH1, arm_loss: aneu_16q_loss}   # 16q carries the other CDH1 allele
+  genomic_screen:
+    adjustments:
+      subtype + purity + histology: [subtype, purity, "C(clin_histology)"]   # CDH1 ~ lobular histology
+  selected_footprints:
+    - name: CDH1
+      variable: mut_CDH1
+      rationale: >-
+        Positive control (section 4.1). Its footprint is expected to persist after adjustment for subtype
+        and to collapse after adjustment for histology, since CDH1 loss produces lobular carcinoma.
+    - name: Tumour mutational burden
+      variable: thor_tmb_log10
+      rationale: >-
+        Neoantigens from a high mutational burden can attract immune cells: a footprint in the
+        immune compartment is the expected reading.
+    - name: TP53
+      variable: mut_TP53
+      rationale: >-
+        TP53 mutations are concentrated in basal-like tumours, so most of their apparent footprint is
+        expected to disappear with adjustment for subtype.
+    - name: Aneuploidy
+      variable: thor_aneuploidy_score
+      rationale: >-
+        Aneuploid tumour cells carry more DNA (larger nuclei expected), and chromosomal instability has
+        been associated with reduced immune infiltration across cancers (Davoli et al. 2017).
+  # CDH1 / E-cadherin loss -> discohesive tumour cells, the hallmark of lobular carcinoma.
+  # Cohesion features chosen from the biology, not from the screen ranking; expected: up / down.
+  positive_control:
+    name: CDH1
+    mutation: mut_CDH1
+    two_hit: cdh1_two_hit
+    arm_loss: aneu_16q_loss
+    arm_label: 16q loss
+    histology: clin_histology
+    typical_histology: lobular           # histology produced by the alteration
+    other_histology: ductal
+    features:
+      RATIO_OF_CARCINOMA_CELLS_AROUND_CARCINOMA_CELL_IN_CARCINOMA_20: down          # cohesion
+      AVG_MIN_DISTANCE_OF_CARCINOMA_CELLS_AROUND_CARCINOMA_CELL_IN_CARCINOMA_20: up # spacing
+      RATIO_OF_CARCINOMA_CELLS_AROUND_CARCINOMA_CELL_IN_STROMA_20: up               # single cells in stroma
+    plot_ylabel: Carcinoma cells among neighbours of carcinoma cells (ratio)
+
+genomic_prediction:
+  split_column: mut_TP53          # test sites drawn among sequenced patients, shared with the alteration extension
+  classes: [LumA, LumB, Basal, HER2E]   # normal-like excluded: small, often normal-tissue rich samples
+  shap_pair: [LumA, Basal]
+
+genomic_alterations:
+  base_features: [subtype, clin_histology, purity]

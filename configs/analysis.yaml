@@ -1,0 +1,499 @@
+# Analysis parameters, one section per pipeline step. Nothing here is specific to a
+# cancer type; an indication file (configs/indications/<name>.yaml) can override any value.
+
+# ---------------------------------------------------------------------------
+# Notebook 01: OpenTME processing
+# ---------------------------------------------------------------------------
+opentme_processing:
+
+  # Columns renamed before merging the five tables, to avoid name collisions.
+  # tme.ABSOLUTE_AREA is the whole tissue; wtr_tissue.ABSOLUTE_AREA is the whole tumour region.
+  renames:
+    wtr_tissue: {ABSOLUTE_AREA: ABSOLUTE_AREA_WTR}
+
+  # Rule-based exclusion of tme features (substring match on the feature name),
+  # applied in order and before looking at any value.
+  tme_exclusions:
+    # Tissue and cell classes not studied. Vessels and
+    # endothelial cells are kept at this step (see quality_exclusions below).
+    classes: ["Blood", "Epithelial tissue", "Other", "Epithelial cell"]
+    # Classes listed under these keys of settings/model_variables.yaml are excluded too
+    # (image-quality classes: out of focus, tissue artifact, marker...). They are used
+    # for slide QC instead.
+    model_variable_keys: [qc_cls]
+    # 40 µm neighbourhoods are largely redundant with the 20 µm ones.
+    substrings:
+      "40 µm neighbourhood": ["_40"]
+      "Redundant shape descriptors": ["LARGEST", "ROUNDNESS", "PERIMETER", "MAJOR", "MINOR"]
+
+  # Tertiary lymphoid structures: summary features only (count, density, area by maturity).
+  tls:
+    prefixes: ["COUNT_", "DENSITY_", "AREA_"]
+    # Slides without TLS have missing values in the tls table: they mean absence.
+    fill_missing_with_zero: true
+
+  # Whole tumour region: lymphocyte densities by zone, plus the tumour-core area.
+  wtr:
+    table: wtr_cell
+    include_keywords: ["CELL_DENSITY", "LYMPHOCYTE"]
+    exclude_keywords: ["BLOOD", "NECROSIS", "EPITHELIAL_TISSUE", "OTHER"]
+    extra_features: ["ABSOLUTE_AREA_TUMOR_CORE"]
+
+  # Whole-slide quality control.
+  slide_qc:
+    sample_types: ["01"]                      # TCGA sample type 01 = primary solid tumour
+    area_feature: ABSOLUTE_AREA_CARCINOMA     # µm²
+    min_carcinoma_area_mm2: 2.0
+    unusable_features:                        # % of tissue, summed
+      - RELATIVE_AREA_OUT_OF_FOCUS
+      - RELATIVE_AREA_TISSUE_ARTIFACT
+      - RELATIVE_AREA_MARKER
+    max_unusable_fraction: 0.5
+    # Alternative thresholds shown in the sensitivity table.
+    sensitivity:
+      min_carcinoma_area_mm2: [0.5, 1, 2, 5]
+      max_unusable_fraction: [0.2, 0.3, 0.5, 0.7]
+
+  # Patients with several slides passing QC keep the one with the largest value of:
+  slide_selection_feature: ABSOLUTE_AREA_CARCINOMA
+
+  # Derived features. Ratios of two densities from the same table are unit-free;
+  # a zero denominator gives NaN. Presence flags are 1 when the sum of the listed
+  # features is > 0.
+  derived:
+    ratios:
+      DERIVED_LYMPHOCYTE_INFILTRATION_INDEX:
+        [CELL_DENSITY_LYMPHOCYTE_IN_CARCINOMA, CELL_DENSITY_LYMPHOCYTE_IN_STROMA]
+      DERIVED_LYMPHOCYTE_CORE_MARGIN_INDEX:
+        [CELL_DENSITY_LYMPHOCYTE_IN_TUMOR_CORE, CELL_DENSITY_LYMPHOCYTE_IN_OUTER_INVASIVE_MARGIN]
+    presence:
+      DERIVED_TLS_PRESENT: [DENSITY_TLS_MATURE, DENSITY_TLS_IMMATURE]
+      DERIVED_MATURE_TLS_PRESENT: [DENSITY_TLS_MATURE]
+
+  # Features removed from the master table after inspection (notebook 01, section 8.5).
+  quality_exclusions:
+    vessel:
+      # Features measured inside vessel tissue: neighbourhoods (..._IN_VESSEL_20) and
+      # cell densities or percentages (..._IN_VESSEL). Vessel tissue itself (area, shape)
+      # and distances to vessels are kept.
+      substrings: ["_IN_VESSEL_"]
+      suffixes: ["_IN_VESSEL"]
+      rationale: >
+        Vessel tissue covers a small fraction of each slide, so features measured inside
+        vessels are estimated on little tissue. They are more often zero or missing than
+        other features and mainly track the amount of vessel on the slide or overall
+        lymphocyte infiltration. Several ranked among the top predictors of PAM50 subtype
+        without a clear biological explanation, and removing them did not reduce predictive
+        performance (notebook 07, ablation).
+      # Reference features used to inspect them.
+      reference_area: RELATIVE_AREA_VESSEL
+      reference_immune: CELL_DENSITY_LYMPHOCYTE
+
+  # Exploratory analysis of the master table.
+  eda:
+    missing_flag: 0.20
+    zero_flag: 0.50
+    redundancy_thresholds: [0.80, 0.90, 0.95]
+    # Size-dependent features (scale with the amount of tissue).
+    size_keywords: ["CELL_COUNT", "ABSOLUTE_AREA", "REGION_COUNT", "CELL_N_TOTAL", "NUMBER_OF"]
+
+# ---------------------------------------------------------------------------
+# Notebook 02: TCGA molecular data
+# ---------------------------------------------------------------------------
+# Pan-cancer PanCanAtlas resources. File names may use {tcga_code}, {tcga_code_lower}
+# and {cbioportal_study}. Files with a `url` are downloaded automatically; the others
+# are supplementary tables to download by hand from the publication (`reference`).
+tcga_molecular:
+  na_strings: ["[Not Available]", "[Not Applicable]", "[Unknown]", "[Not Evaluated]",
+               "[Discrepancy]", "[Completed]", "#N/A", "NA", ""]
+  sample_types: ["01"]                       # primary solid tumour
+
+  # Molecular subtype used to group figures and as a covariate downstream.
+  # Default: the TCGA subtype of Thorsson Table S1 ("TCGA Subtype"), available for every
+  # cancer type. An indication can use a curated file instead (source: file).
+  subtypes:
+    source: thorsson
+    thorsson_column: TCGA Subtype
+    column: clin_subtype
+    label: TCGA subtype
+    order: []                                # empty: most frequent first
+    colors: {}                               # level -> colour; levels without one get a palette colour
+
+  sources:
+    cdr:
+      file: TCGA-CDR-SupplementalTableS1.xlsx
+      sheet: TCGA-CDR
+      url: https://api.gdc.cancer.gov/data/1b5f413e-a8d1-4d10-92eb-7c4ae739ed81
+      reference: "Liu et al., Cell 2018 (TCGA-CDR)"
+    absolute:
+      file: TCGA_mastercalls.abs_tables_JSedit.fixed.txt
+      url: https://api.gdc.cancer.gov/data/4f277128-f793-4354-a13d-30cc7fe9f6b5
+      reference: "Taylor et al., Cancer Cell 2018 (ABSOLUTE, PanCanAtlas)"
+    thorsson:
+      file: thorsson_2018_table_s1.xlsx
+      sheet: 0
+      reference: "Thorsson et al., Immunity 2018, Table S1"
+    mc3:
+      file: mc3.v0.2.8.PUBLIC.maf.gz
+      url: https://api.gdc.cancer.gov/data/1c8cfe5f-e52d-41ba-94da-f15ea1337efc
+      reference: "Ellrott et al., Cell Syst 2018 (MC3)"
+    bailey:
+      file: bailey_2018_table_s1.xlsx
+      sheet: Table S1
+      header: 3
+      reference: "Bailey et al., Cell 2018, Table S1"
+    sanchez_vega:
+      file: sanchez_vega_2018_pathways.xlsx
+      sheet: 2
+      reference: "Sanchez-Vega et al., Cell 2018, Table S4"
+    arm_level:
+      file: "cbioportal_{tcga_code_lower}_data_armlevel_cna.txt"
+      url: "https://media.githubusercontent.com/media/cBioPortal/datahub/master/public/{cbioportal_study}/data_armlevel_cna.txt"
+      reference: "Taylor et al., Cancer Cell 2018, via cBioPortal"
+    hypoxia:
+      file: "cbioportal_{tcga_code_lower}_data_clinical_supp_hypoxia.txt"
+      url: "https://media.githubusercontent.com/media/cBioPortal/datahub/master/public/{cbioportal_study}/data_clinical_supp_hypoxia.txt"
+      reference: "Bhandari et al., Nat Genet 2019, via cBioPortal"
+    rna:
+      file: "TCGA.{tcga_code}.HiSeqV2.gz"
+      reference: "UCSC Xena, TCGA HiSeqV2 (log2 RSEM + 1)"
+    bagaev:
+      file: bagaev_2021_table_s1.xlsx
+      sheet: 2
+      header: 1
+      reference: "Bagaev et al., Cancer Cell 2021, Table S1"
+
+  clinical:
+    columns:                                 # TCGA-CDR name -> new name
+      age_at_initial_pathologic_diagnosis: clin_age
+      gender: clin_sex
+      ajcc_pathologic_tumor_stage: clin_stage
+      histological_type: clin_histological_type
+      OS: clin_os
+      OS.time: clin_os_time
+      PFI: clin_pfi
+      PFI.time: clin_pfi_time
+      margin_status: clin_margin_status
+      menopause_status: clin_menopause_status
+    numeric: [clin_os, clin_os_time, clin_pfi, clin_pfi_time]
+    descriptions:
+      clin_age: Age at diagnosis (years)
+      clin_sex: Sex
+      clin_histological_type: Histological type (original, TCGA-CDR)
+      clin_histology: Histology grouped into a few classes (histology_map); other types = other
+      clin_stage_simple: AJCC pathologic stage collapsed to I-IV
+      clin_tss: Tissue source site (hospital code, barcode characters 6-7)
+      clin_os: Overall survival event (1 = deceased, 0 = censored)
+      clin_os_time: Overall survival follow-up time (days)
+      clin_pfi: Progression-free interval event (1 = recurrence or progression, 0 = censored)
+      clin_pfi_time: Progression-free interval follow-up time (days)
+      clin_margin_status: Surgical margin status
+      clin_menopause_status: Menopausal status (Post / Pre / Peri)
+
+  absolute:
+    call_status: called                      # confident ABSOLUTE solutions only
+    columns: {purity: abs_purity, ploidy: abs_ploidy, Genome doublings: abs_genome_doublings}
+
+  thorsson:
+    id_column: TCGA Participant Barcode
+    study_column: TCGA Study
+    columns:                                 # Thorsson name -> new name (main variables)
+      Immune Subtype: thor_immune_subtype
+      Leukocyte Fraction: thor_leukocyte_fraction
+      TIL Regional Fraction: thor_til_fraction_he
+      TGF-beta Response: thor_tgfb_response
+      IFN-gamma Response: thor_ifng_response
+      Lymphocyte Infiltration Signature Score: thor_lymphocyte_infiltration
+      Macrophage Regulation: thor_macrophage_regulation
+      Proliferation: thor_proliferation
+      Nonsilent Mutation Rate: thor_tmb
+      SNV Neoantigens: thor_snv_neoantigens
+      Aneuploidy Score: thor_aneuploidy_score
+      Intratumor Heterogeneity: thor_heterogeneity
+      Homologous Recombination Defects: thor_hrd
+      BCR Richness: thor_bcr_richness
+    # CIBERSORT cell types (proportions within leukocytes).
+    cibersort_main: ["T Cells CD8", "T Cells Regulatory Tregs", "Macrophages M2",
+                     "B Cells Naive", "B Cells Memory", "Plasma Cells", "T Cells Follicular Helper"]
+    cibersort_exploratory: ["T Cells CD4 Naive", "T Cells CD4 Memory Resting", "T Cells CD4 Memory Activated",
+                            "T Cells gamma delta", "NK Cells Resting", "NK Cells Activated", "Monocytes",
+                            "Macrophages M0", "Macrophages M1", "Dendritic Cells Resting",
+                            "Dendritic Cells Activated", "Mast Cells Resting", "Mast Cells Activated",
+                            "Eosinophils", "Neutrophils"]
+    # Own sums (exploratory, description only).
+    sums:
+      cib_lymphocytes: [cib_b_cells_naive, cib_b_cells_memory, cib_t_cells_cd8, cib_t_cells_cd4_naive,
+                        cib_t_cells_cd4_memory_resting, cib_t_cells_cd4_memory_activated,
+                        cib_t_cells_follicular_helper, cib_t_cells_regulatory_tregs,
+                        cib_t_cells_gamma_delta, cib_nk_cells_resting, cib_nk_cells_activated]
+      cib_macrophages: [cib_macrophages_m0, cib_macrophages_m1, cib_macrophages_m2]
+
+  mutations:
+    columns: [Hugo_Symbol, Variant_Classification, Tumor_Sample_Barcode, FILTER, HGVSp_Short]
+    nonsilent: [Missense_Mutation, Nonsense_Mutation, Frame_Shift_Del, Frame_Shift_Ins,
+                In_Frame_Del, In_Frame_Ins, Splice_Site, Translation_Start_Site, Nonstop_Mutation]
+    # `wga` marks every mutation of a sample whose DNA was amplified, not suspicious calls.
+    allowed_filters: [PASS, wga, native_wga_mix]
+    min_freq: 0.05                           # drivers mutated in >= 5 % of profiled patients
+
+  pathways:
+    sample_column: SAMPLE_BARCODE
+    names: ["Cell Cycle", "HIPPO", "MYC", "NOTCH", "NRF2", "PI3K", "RTK RAS", "TP53", "TGF-Beta", "WNT"]
+
+  arm_level:
+    arm_column: NAME
+    calls: {Gain: 1, Loss: -1, Unchanged: 0}
+    min_event_freq: 0.30
+    required_events: []                      # kept whatever their frequency
+    secondary_events: []                     # level "secondary"; the rest are exploratory
+
+  hypoxia:
+    id_column: PATIENT_ID
+    main_score: hyp_buffa
+
+  signatures:
+    # Added to the 29 Bagaev signatures.
+    extra:
+      tls_12_chemokines: [CCL2, CCL3, CCL4, CCL5, CCL8, CCL18, CCL19, CCL21, CXCL9, CXCL10, CXCL11, CXCL13]
+      tls_organizers: [CXCL13, CCL19, CCL21]
+    msigdb_library: MSigDB_Hallmark_2020
+    msigdb_sets: {hallmark_glycolysis: Glycolysis}
+    # Current HGNC symbol -> older symbol used in the Xena matrix.
+    aliases: {CXCL8: IL8, VSIR: C10orf54, ERO1A: ERO1L, PKM: PKM2, AK4: AK3L1, RARS1: RARS}
+    min_size: 3
+    threads: 4
+
+  redundancy:
+    rho_screening: 0.75                      # ~56 % shared variance: modules (diagnostic only)
+    rho_redundant: 0.90                      # >= 81 % shared variance: one variable per pair dropped
+    protected: []                            # variables never dropped (pre-specified), per indication
+    keep_pairs: []                           # pairs kept on purpose, per indication
+
+  single_genes: []                           # genes added as expr_<GENE>, per indication
+  pathway_genes: {}                          # pathway -> mutation columns, for the pathway figure
+
+# ---------------------------------------------------------------------------
+# Notebook 03: integration
+# ---------------------------------------------------------------------------
+integration:
+  # Key variables of the immune analyses, whose coverage is shown explicitly (the subtype column is added).
+  key_variables: [CELL_DENSITY_LYMPHOCYTE_IN_CARCINOMA, CELL_DENSITY_LYMPHOCYTE_IN_STROMA,
+                  thor_leukocyte_fraction, thor_til_fraction_he, abs_purity]
+
+# ---------------------------------------------------------------------------
+# Notebook 04: spatial immune phenotypes
+# ---------------------------------------------------------------------------
+immune_phenotypes:
+  # OpenTME features and their source table (for the conversion to cells/mm², see density_per_mm2).
+  image:
+    lymphocyte_density: {feature: CELL_DENSITY_LYMPHOCYTE, table: tme}
+    tumour_cell_fraction: {feature: CELL_PERCENTAGE_CARCINOMA_CELL, table: tme}
+    lymphocytes_carcinoma: {feature: CELL_DENSITY_LYMPHOCYTE_IN_CARCINOMA, table: tme}
+    lymphocytes_stroma: {feature: CELL_DENSITY_LYMPHOCYTE_IN_STROMA, table: tme}
+    lymphocytes_core: {feature: CELL_DENSITY_LYMPHOCYTE_IN_TUMOR_CORE, table: wtr_cell}
+    lymphocytes_margin: {feature: CELL_DENSITY_LYMPHOCYTE_IN_OUTER_INVASIVE_MARGIN, table: wtr_cell}
+  molecular:
+    leukocyte_fraction: thor_leukocyte_fraction   # defines hot tumours (DNA methylation)
+    purity: abs_purity                            # covariate
+    til_saltz: thor_til_fraction_he               # calibration only
+  clinical:
+    age: clin_age
+    stage: clin_stage_simple
+    pfi: clin_pfi
+    pfi_time: clin_pfi_time
+    os: clin_os
+    os_time: clin_os_time
+    margin_status: clin_margin_status
+
+  hot_quantile: 0.5             # hot = leukocyte fraction >= cohort median
+  index_threshold: 0.0          # inflamed = infiltration index >= 0
+  eps: 0.01                     # pseudocount of the index, cells/mm²
+  min_per_group: 5              # minimum tumours per phenotype to fit a model
+  min_subtype_level: 30         # subtype levels with fewer tumours are dropped from logistic models
+  min_stratum_size: 20          # subtypes with fewer hot tumours get no column in the heatmap
+  fdr_alpha: 0.05
+
+  # Pre-specified mechanisms of immune exclusion (Hammerl et al. 2021). Variables missing
+  # from the table are skipped. thor_tmb_log1p is derived in the notebook.
+  hypotheses:
+    Barrier: [thor_tgfb_response, sig_cancer_associated_fibroblasts, expr_COL10A1]
+    Brakes: [sig_checkpoint_molecules, cib_t_cells_regulatory_tregs]
+    Response quality: [thor_ifng_response, sig_effector_cells, cib_t_cells_cd8]
+    Visibility: [thor_tmb_log1p, thor_hrd, sig_mhci]
+    Hypoxia: [hyp_buffa, sig_hallmark_glycolysis]
+
+  # Unbiased screen of all molecular variables.
+  screen:
+    prefixes: [thor_, cib_, sig_, expr_, hyp_, mut_, path_, aneu_, abs_]
+    exclude: [thor_leukocyte_fraction, thor_til_fraction_he, abs_purity, thor_immune_subtype, mut_profiled,
+              thor_tmb, cib_lymphocytes, cib_macrophages]   # group definition, covariates, raw TMB, own sums
+    min_values: 50
+
+  subtype_strata: []            # subtypes shown in the heatmap; empty = all with >= min_stratum_size
+  extra_strata: {}              # name -> binary column, extra heatmap columns
+  example_tumours: {}           # phenotype -> TCGA case ID, shown with its slide thumbnail
+  thumbnail_kind: cell_classification   # OpenTME thumbnail layer shown for the example tumours
+  outcome:
+    max_years: 10
+    cox_penalizer: 0.1          # small ridge penalty for stability with few events
+    cox_variables: []           # continuous variables also tested in Cox models (per SD)
+
+# ---------------------------------------------------------------------------
+# Notebook 05: tertiary lymphoid structures
+# ---------------------------------------------------------------------------
+tls_analysis:
+  image:
+    density_mature: DENSITY_TLS_MATURE
+    density_immature: DENSITY_TLS_IMMATURE
+    present: DERIVED_TLS_PRESENT
+    mature_present: DERIVED_MATURE_TLS_PRESENT
+  # RNA footprint of TLS (notebook 02 signatures): validation only, excluded from the screen.
+  signatures:
+    sig_tls_12_chemokines: 12-chemokine TLS signature
+    sig_tls_organizers: TLS-organiser signature (CXCL13, CCL19, CCL21)
+  running_sum:
+    signature: tls_12_chemokines         # gene list from tcga_molecular.signatures.extra
+    example_classes: [No TLS, Mature]
+    alpha: 0.25                          # ssGSEA weight exponent (gseapy default)
+  # Stepwise comparisons: name, reference class (0), comparison class (1).
+  contrasts:
+    - [Formation, No TLS, Immature only]
+    - [Maturation, Immature only, Mature]
+  # The main model also adjusts for leukocyte fraction: "at the same amount of immune infiltrate".
+  adjust_for_leukocyte_fraction: true
+  min_values: 50
+  max_labels: 10                         # labels per volcano panel
+  n_forest: 12                           # rows of the forest plot when nothing is significant
+  screen_exclude: [thor_til_fraction_he]  # image-derived (Saltz TILs); signatures and covariates are added
+  # Robustness of phenotype results to TLS (outcome ~ phenotype + subtype + purity [+ TLS covariates]).
+  robustness_outcomes: []
+  # Genes whose mutations are described in detail (truncating vs missense) by TLS class.
+  mutation_detail_genes: []
+  truncating_classes: [Nonsense_Mutation, Frame_Shift_Del, Frame_Shift_Ins, Splice_Site, Nonstop_Mutation,
+                       Translation_Start_Site]
+
+# ---------------------------------------------------------------------------
+# Notebook 06: genomic footprints in tissue architecture
+# ---------------------------------------------------------------------------
+genomic_footprints:
+  # Covariate terms: "subtype" and "purity" are aliases for the subtype column (as a category)
+  # and tumour purity; any other term is used as written, e.g. "C(clin_histology)".
+  # The main model is subtype + purity; subtype also defines the permutation strata.
+  derived:
+    log10p1: [thor_tmb]                  # highly skewed -> <column>_log10 = log10(1 + x)
+    two_hit: {}                          # name -> {mutation, arm_loss}: both alleles hit (see breast)
+  image:
+    # Absolute counts and areas (they scale with the amount of tissue) and scanner metadata
+    drop_prefixes: [NUMBER_, TOTAL_, ABSOLUTE_, CELL_N_TOTAL, CELL_COUNT_, REGION_COUNT_, IMAGE_, COUNT_, AREA_]
+    drop_substrings: [OUT_OF_FOCUS, TISSUE_ARTIFACT, MARKER]   # technical QC readouts
+    drop_columns: [N_SLIDES_TOTAL]
+    max_missing: 0.20
+    max_dominant_fraction: 0.95          # near-constant: one value in > 95 % of patients
+    transform: rank_normal               # rank_normal | none (rank-based inverse normal transformation)
+  genomic_screen:
+    binary_prefixes: [mut_, aneu_, path_]
+    continuous:                          # genome-wide DNA measures (Thorsson et al. 2018)
+      - thor_aneuploidy_score
+      - thor_tmb_log10
+      - thor_hrd
+      - thor_heterogeneity
+    exposure_transform: rank_normal      # TMB stays skewed even on a log scale (hypermutated tumours)
+    exclude: [mut_profiled]
+    min_altered: 20                      # minimum altered and non-altered cases
+    n_perm: 1000
+    seed: 0
+    fdr_alpha: 0.05
+    # The same pairwise screen under increasingly strict adjustment (least adjusted first)
+    adjustments:
+      purity only: [purity]
+      subtype + purity: [subtype, purity]
+  top_bars: 10                           # genomic variables in the bar plot of the strictest adjustment
+  # Footprints followed across adjustment levels (a list, so an indication replaces it entirely)
+  selected_footprints:
+    - name: Tumour mutational burden
+      variable: thor_tmb_log10
+      rationale: >-
+        Neoantigens from a high mutational burden can attract immune cells: a footprint in the
+        immune compartment is the expected reading.
+    - name: Aneuploidy
+      variable: thor_aneuploidy_score
+      rationale: >-
+        Aneuploid tumour cells carry more DNA (larger nuclei expected), and chromosomal instability has
+        been associated with reduced immune infiltration across cancers (Davoli et al. 2017).
+  top_features: 15                       # features shown per selected footprint
+  # Positive control: an alteration with a well-known histological phenotype (see breast). Empty = skipped.
+  positive_control: {}
+
+# ---------------------------------------------------------------------------
+# Notebook 07: prediction of molecular subtype (and, preliminary, genomic alterations)
+# ---------------------------------------------------------------------------
+genomic_prediction:
+  # Evaluation design: whole tissue source sites are held out for the final test
+  group_column: clin_tss
+  test_size: 0.2
+  seed: 42
+  cv_folds: 5
+  split_column: null              # test sites drawn among patients with this column known; null = with a subtype
+  # Subtypes to predict; empty = every level with at least min_class_size patients
+  classes: []
+  min_class_size: 30
+  # Image features: the selection rules of genomic_footprints.image, plus these columns
+  extra_drop_columns: [DERIVED_TLS_PRESENT]   # any TLS: in > 80 % of tumours; TLS densities carry the information
+  redundancy_thresholds: [0.95, 0.90, 0.80]   # shown for comparison
+  redundancy_threshold: 0.90                  # used
+  # Sensitivity check: refit the selected model without features containing these substrings
+  sensitivity_drop_substrings: [VESSEL]
+  # Overfitting diagnosis of the default logistic regression
+  validation_C: [0.0001, 0.001, 0.01, 0.1, 1, 10]
+  selection_grid:
+    select__k: [25, 50, 100, 200, all]
+    model__C: [0.001, 0.01, 0.1, 1]
+  # Model families, simplest first (the order breaks ties in the selection rule)
+  complexity_order: [logistic, svm, random_forest, xgboost]
+  n_iter: 50
+  # Search spaces, fixed before looking at the results. {loguniform|uniform: [low, high]},
+  # {randint: [low, high)} or a list of values.
+  search_spaces:
+    logistic:
+      model__C: {loguniform: [1.0e-4, 10]}
+    svm:
+      model__C: {loguniform: [0.01, 100]}
+      model__kernel: [linear, rbf]
+      model__gamma: {loguniform: [1.0e-5, 0.1]}      # only used by the rbf kernel
+    random_forest:
+      model__n_estimators: {randint: [200, 800]}
+      model__max_depth: [null, 5, 10, 20]
+      model__min_samples_leaf: {randint: [1, 20]}
+      model__max_features: [sqrt, 0.1, 0.3]
+    xgboost:
+      model__n_estimators: {randint: [100, 600]}
+      model__max_depth: {randint: [1, 7]}
+      model__learning_rate: {loguniform: [0.01, 0.3]}
+      model__subsample: {uniform: [0.3, 1.0]}
+      model__colsample_bytree: {uniform: [0.3, 1.0]}
+      model__min_child_weight: {loguniform: [0.1, 10]}
+      model__reg_lambda: {loguniform: [0.1, 10]}
+  # SHAP figures
+  shap_top_stacked: 15
+  shap_top_signed: 8
+  shap_pair: []                   # two classes compared side by side (see breast)
+  n_boot: 1000
+
+# ---------------------------------------------------------------------------
+# Notebook 08 (preliminary): prediction of genomic alterations. Design, image features,
+# test sites and search spaces are those of genomic_prediction.
+# ---------------------------------------------------------------------------
+genomic_alterations:
+  alterations:
+    - {name: TP53 mutation, column: mut_TP53, task: classification}
+    - {name: Tumour mutational burden, column: thor_tmb, task: regression}
+    - {name: Aneuploidy, column: thor_aneuploidy_score, task: regression}
+  base_features: [subtype, purity]    # clinical baseline; aliases: subtype, purity
+  classification_model: logistic      # fixed model family per task (search spaces in genomic_prediction)
+  regression_model: random_forest
+  n_iter: 30
+  select_k: [50, 100, 200, all]       # image features kept by univariate selection
+  min_per_subtype: 20                 # patients needed to report performance within a subtype
+  min_per_class: 10                   # and, for binary targets, patients in each class
+  shap_max_patients: 500              # training patients used to compute SHAP values
+  shap_top: 10                        # features shown per alteration

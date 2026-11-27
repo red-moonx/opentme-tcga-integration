@@ -1,0 +1,32 @@
+# Data (never commit: the OpenTME and TCGA files are not redistributed)
+data/
+*.parquet
+*.h5
+*.h5ad
+*.gz
+
+# Results are committed (aggregated figures and tables), except patient-level tables
+results/**/slide_selection*.csv
+results/**/*_cv_predictions.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+
+# Figures with OpenTME slide images (not redistributed; generated locally by notebook 04)
+figures/**/*example_tumours*.png
